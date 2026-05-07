@@ -1,49 +1,3 @@
-# =============================================================================
-# src/preprocessing.py
-# MEMBER 1 — Deadline: 26 April
-# Role: Data Pipeline & Preprocessing Engineer
-# =============================================================================
-# Responsibility:
-#   Build a dual-branch ColumnTransformer. This is the most critical deliverable
-#   for Member 1. The transformer is returned UNFITTED — fitting happens inside
-#   the imblearn pipeline during cross-validation (never on the full dataset).
-#
-# Branch design:
-#   Numeric branch  (NUMERIC_FEATURES, 10 cols):
-#     SimpleImputer(strategy='median')
-#     → PowerTransformer(method='yeo-johnson')   ← normalises skewed features
-#     → StandardScaler()
-#
-#   Nominal branch  (NOMINAL_FEATURES, 3 cols):
-#     SimpleImputer(strategy='most_frequent')
-#     → OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-#
-#   Binary branch   (BINARY_FEATURES, 13 cols):
-#     Already 0/1 integers — DO NOT apply OHE (doubles column count for no gain)
-#     SimpleImputer(strategy='most_frequent')
-#     → OrdinalEncoder()   OR   passthrough
-#
-# IMPORTANT: Never call .fit() on the full dataset. The pipeline handles fitting.
-#
-# Checklist:
-#   [ ] Use column lists from config: NUMERIC_FEATURES, NOMINAL_FEATURES, BINARY_FEATURES
-#   [ ] Return unfitted ColumnTransformer (remainder='drop')
-#   [ ] Print branch summary (column counts per branch)
-# =============================================================================
-"""
-from sklearn.compose import ColumnTransformer
-from config import NUMERIC_FEATURES, NOMINAL_FEATURES, BINARY_FEATURES
-
-
-def build_preprocessor() -> ColumnTransformer:
-   
-    Build and return an unfitted dual-branch ColumnTransformer.
-
-    Branches: numeric (impute→power→scale), nominal (impute→OHE), binary (impute→ordinal)
-   
-    # TODO: implement
-    raise NotImplementedError("preprocessing.py: build_preprocessor() not yet implemented.")
-"""
 """
 preprocessing.py
 ================
@@ -53,7 +7,7 @@ Responsibilities:
 - Define the full ColumnTransformer with two branches:
     • Numeric  : SimpleImputer(median) → PowerTransformer(yeo-johnson) → StandardScaler
     • Categorical: SimpleImputer(most_frequent)
-                   → OneHotEncoder  (nominal: Gender, Ethnicity, EducationLevel)
+                   → OneHotEncoder  (nominal: Gender, Ethnicity, EducationLevel, etc.)
                    → OrdinalEncoder (ordered binary/ordinal features)
 - Binary (0/1) features are routed to the ordinal branch — NOT through OHE
 - Expose a build_preprocessor() factory that other modules import
@@ -77,6 +31,12 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import NUMERIC_FEATURES, NOMINAL_FEATURES, BINARY_FEATURES
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -87,73 +47,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("preprocessing")
 
+
 # ---------------------------------------------------------------------------
 # Feature catalogue
 # ---------------------------------------------------------------------------
-
-# --- Continuous / truly numeric features ---
-# These contain real-valued measurements and benefit from Yeo-Johnson + scaling
-NUMERIC_FEATURES: list[str] = [
-    "Age",
-    "BMI",
-    "PhysicalActivity",
-    "DietQuality",
-    "SleepQuality",
-    "PollutionExposure",
-    "PollenExposure",
-    "DustExposure",
-    "LungFunctionFEV1",
-    "LungFunctionFVC",
-]
-
-# --- Nominal categorical features — encoded via OneHotEncoder ---
-NOMINAL_FEATURES: list[str] = [
-    "Gender",
-    "Ethnicity",
-    "EducationLevel",
-]
-
-# --- Ordered / binary features — encoded via OrdinalEncoder ---
-# Binary (0/1) flags: applying OHE would double column count for zero benefit;
-# route to OrdinalEncoder instead (identity transform for already-numeric 0/1)
-BINARY_FEATURES: list[str] = [
-    "Smoking",
-    "PetAllergy",
-    "FamilyHistoryAsthma",
-    "HistoryOfAllergies",
-    "Eczema",
-    "HayFever",
-    "GastroesophagealReflux",
-    "Wheezing",
-    "ShortnessOfBreath",
-    "ChestTightness",
-    "Coughing",
-    "NighttimeSymptoms",
-    "ExerciseInduced",
-]
-
 # Explicit category ordering for OrdinalEncoder (must cover all values in data)
 # For binary features the order is simply [0, 1]
 ORDINAL_CATEGORIES: list[list[Any]] = [
-    [0, 1],  # Smoking
-    [0, 1],  # PetAllergy
-    [0, 1],  # FamilyHistoryAsthma
-    [0, 1],  # HistoryOfAllergies
-    [0, 1],  # Eczema
-    [0, 1],  # HayFever
-    [0, 1],  # GastroesophagealReflux
-    [0, 1],  # Wheezing
-    [0, 1],  # ShortnessOfBreath
-    [0, 1],  # ChestTightness
-    [0, 1],  # Coughing
-    [0, 1],  # NighttimeSymptoms
-    [0, 1],  # ExerciseInduced
+    [0, 1] for _ in BINARY_FEATURES
 ]
-
-assert len(BINARY_FEATURES) == len(ORDINAL_CATEGORIES), (
-    "BINARY_FEATURES and ORDINAL_CATEGORIES must have the same length."
-)
-
 
 # ---------------------------------------------------------------------------
 # Branch pipeline factories
@@ -267,22 +169,6 @@ def get_feature_names(preprocessor: ColumnTransformer) -> list[str]:
     """
     Return human-readable output feature names after the transformer has
     been fitted.
-
-    Parameters
-    ----------
-    preprocessor : ColumnTransformer
-        A **fitted** ColumnTransformer (i.e., after calling .fit() or
-        .fit_transform() on training data).
-
-    Returns
-    -------
-    list[str]
-        Names for every column in the transformed output matrix.
-
-    Raises
-    ------
-    sklearn.exceptions.NotFittedError
-        If called before the transformer is fitted.
     """
     return list(preprocessor.get_feature_names_out())
 
@@ -295,8 +181,9 @@ if __name__ == "__main__":
     sys.path.insert(0, ".")
     from src.data_loader import load_and_validate
     from src.splitter import split_dataset
+    from config import DATA_RAW
 
-    csv = sys.argv[1] if len(sys.argv) > 1 else "data/raw/asthma_disease_data.csv"
+    csv = sys.argv[1] if len(sys.argv) > 1 else DATA_RAW
     df  = load_and_validate(csv)
 
     X_train, X_val, X_test, y_train, y_val, y_test = split_dataset(df)
@@ -307,6 +194,3 @@ if __name__ == "__main__":
 
     print(f"X_train transformed shape : {X_train_t.shape}")
     print(f"X_val   transformed shape : {X_val_t.shape}")
-    print(f"Output features ({X_train_t.shape[1]}):")
-    for name in get_feature_names(preprocessor):
-        print(f"  {name}")

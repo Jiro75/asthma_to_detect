@@ -214,12 +214,17 @@ def split_dataset(
 
     splits_dir = Path(splits_dir)
 
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from config import DROP_COLS
+
     # Separate features from target
-    # Drop PatientID — it is an identifier, not a predictive feature
     drop_cols = [target_column]
-    if "PatientID" in df.columns:
-        drop_cols.append("PatientID")
-        logger.info("Dropping 'PatientID' — identifier column, not a feature.")
+    for col in DROP_COLS:
+        if col in df.columns:
+            drop_cols.append(col)
+            logger.info("Dropping '%s' — identifier/leakage column.", col)
 
     X = df.drop(columns=drop_cols)
     y = df[target_column]
@@ -309,7 +314,8 @@ if __name__ == "__main__":
     import sys
     from data_loader import load_and_validate
 
-    csv_path = sys.argv[1] if len(sys.argv) > 1 else "data/raw/asthma_disease_data.csv"
+    from config import DATA_RAW
+    csv_path = sys.argv[1] if len(sys.argv) > 1 else DATA_RAW
 
     df = load_and_validate(csv_path)
     X_train, X_val, X_test, y_train, y_val, y_test = split_dataset(

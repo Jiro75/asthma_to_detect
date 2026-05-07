@@ -93,13 +93,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cv_pipeline")
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import SMOTE_RATIO_DEFAULT, SMOTE_RATIO_MIN, SMOTE_RATIO_MAX, RANDOM_STATE, CV_FOLDS
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-DEFAULT_SMOTE_RATIO: float  = 0.4
-SMOTE_RATIO_SWEEP:  list[float] = [0.3, 0.35, 0.4, 0.45, 0.5]
-RANDOM_STATE:       int     = 42
-CV_N_SPLITS:        int     = 5      # stratified k-fold
+DEFAULT_SMOTE_RATIO: float  = SMOTE_RATIO_DEFAULT
+# Create 5 steps between MIN and MAX
+SMOTE_RATIO_SWEEP:  list[float] = [
+    round(SMOTE_RATIO_MIN + i * (SMOTE_RATIO_MAX - SMOTE_RATIO_MIN) / 4, 2)
+    for i in range(5)
+]
+CV_N_SPLITS:        int     = CV_FOLDS      # stratified k-fold
 
 
 # ---------------------------------------------------------------------------
@@ -479,7 +488,8 @@ if __name__ == "__main__":
     # NOTE: RandomForestClassifier below is a DEMO placeholder only.
     # Member 2 will replace it with the tuned classifiers from models.py.
     # Do NOT delete this block — it is the integration smoke-test for your pipeline.
-    csv = sys.argv[1] if len(sys.argv) > 1 else "data/raw/asthma_disease_data.csv"
+    from config import DATA_RAW
+    csv = sys.argv[1] if len(sys.argv) > 1 else DATA_RAW
     df  = load_and_validate(csv)
     X_train, X_val, X_test, y_train, y_val, y_test = split_dataset(df)
 

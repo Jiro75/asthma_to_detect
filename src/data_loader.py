@@ -1,46 +1,3 @@
-# =============================================================================
-# src/data_loader.py
-# MEMBER 1 — Deadline: 26 April
-# Role: Data Pipeline & Preprocessing Engineer
-# =============================================================================
-# Responsibility:
-#   Ingest the Kaggle CSV, validate the schema (26 expected feature columns +
-#   target), check dtypes, remove exact duplicate rows, and return a clean
-#   (X, y) pair. Raise informative errors if validation fails.
-#
-# Expected output:
-#   X : pd.DataFrame  — all feature columns (NUMERIC + NOMINAL + BINARY)
-#   y : pd.Series     — binary target (0 = No Asthma, 1 = Asthma)
-#
-# Checklist:
-#   [ ] Load DATA_RAW csv
-#   [ ] Assert all expected columns are present (26 features + TARGET_COL)
-#   [ ] Assert correct dtypes (numeric cols are float/int, binary cols are int)
-#   [ ] Drop exact duplicate rows; log how many were removed
-#   [ ] Separate X (features) from y (TARGET_COL)
-#   [ ] Print shape and class balance summary (value_counts + ratio)
-#   [ ] Raise ValueError with a descriptive message if any check fails
-# =============================================================================
-
-"""
-import pandas as pd
-from config import DATA_RAW, TARGET_COL, NUMERIC_FEATURES, NOMINAL_FEATURES, BINARY_FEATURES
-
-EXPECTED_FEATURES = NUMERIC_FEATURES + NOMINAL_FEATURES + BINARY_FEATURES  # 26 columns
-
-
-def load_data() -> tuple[pd.DataFrame, pd.Series]:
-    
-    Load raw CSV, validate schema and dtypes, drop duplicates.
-
-    Returns
-    -------
-    X : pd.DataFrame  — feature matrix (26 columns)
-    y : pd.Series     — binary target
-    
-    #TODO: implement
-    raise NotImplementedError("data_loader.py: load_data() not yet implemented.")
-"""
 """
 data_loader.py
 ==============
@@ -48,8 +5,9 @@ Data Pipeline & Preprocessing Engineer — Deliverable D1
 
 Responsibilities:
 - Ingest the Kaggle asthma CSV
-- Validate schema (26 expected feature columns, correct dtypes)
+- Validate schema (expected feature columns, correct dtypes)
 - Remove exact duplicate rows
+- Encode target 'Diagnosis' to 1/0
 - Return a clean pandas DataFrame
 
 Author : Member 1
@@ -60,6 +18,18 @@ import pandas as pd
 import numpy as np
 import logging
 from pathlib import Path
+
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import (
+    NUMERIC_FEATURES,
+    NOMINAL_FEATURES,
+    BINARY_FEATURES,
+    TARGET_COL,
+    DROP_COLS
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -74,71 +44,10 @@ logger = logging.getLogger("data_loader")
 # ---------------------------------------------------------------------------
 # Schema Definition
 # ---------------------------------------------------------------------------
-# All 26 feature columns (target 'Diagnosis' excluded — handled separately)
-EXPECTED_FEATURE_COLUMNS: list[str] = [
-    "PatientID",
-    "Age",
-    "Gender",
-    "Ethnicity",
-    "EducationLevel",
-    "BMI",
-    "Smoking",
-    "PhysicalActivity",
-    "DietQuality",
-    "SleepQuality",
-    "PollutionExposure",
-    "PollenExposure",
-    "DustExposure",
-    "PetAllergy",
-    "FamilyHistoryAsthma",
-    "HistoryOfAllergies",
-    "Eczema",
-    "HayFever",
-    "GastroesophagealReflux",
-    "LungFunctionFEV1",
-    "LungFunctionFVC",
-    "Wheezing",
-    "ShortnessOfBreath",
-    "ChestTightness",
-    "Coughing",
-    "NighttimeSymptoms",
-    "ExerciseInduced",
-]
-
-TARGET_COLUMN: str = "Diagnosis"
-
-# Expected dtypes per column (use broad categories: 'numeric' / 'object')
-DTYPE_EXPECTATIONS: dict[str, str] = {
-    "PatientID":              "numeric",
-    "Age":                    "numeric",
-    "Gender":                 "numeric",
-    "Ethnicity":              "numeric",
-    "EducationLevel":         "numeric",
-    "BMI":                    "numeric",
-    "Smoking":                "numeric",
-    "PhysicalActivity":       "numeric",
-    "DietQuality":            "numeric",
-    "SleepQuality":           "numeric",
-    "PollutionExposure":      "numeric",
-    "PollenExposure":         "numeric",
-    "DustExposure":           "numeric",
-    "PetAllergy":             "numeric",
-    "FamilyHistoryAsthma":    "numeric",
-    "HistoryOfAllergies":     "numeric",
-    "Eczema":                 "numeric",
-    "HayFever":               "numeric",
-    "GastroesophagealReflux": "numeric",
-    "LungFunctionFEV1":       "numeric",
-    "LungFunctionFVC":        "numeric",
-    "Wheezing":               "numeric",
-    "ShortnessOfBreath":      "numeric",
-    "ChestTightness":         "numeric",
-    "Coughing":               "numeric",
-    "NighttimeSymptoms":      "numeric",
-    "ExerciseInduced":        "numeric",
-    "Diagnosis":              "numeric",
-}
-
+# The columns we actually need for the pipeline (features + target + drop cols)
+EXPECTED_COLUMNS: list[str] = (
+    NUMERIC_FEATURES + NOMINAL_FEATURES + BINARY_FEATURES + [TARGET_COL] + DROP_COLS
+)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -149,7 +58,7 @@ def _validate_columns(df: pd.DataFrame) -> None:
     Ensure all expected feature columns AND the target column are present.
     Raises ValueError with a descriptive message if any are missing.
     """
-    all_expected = set(EXPECTED_FEATURE_COLUMNS + [TARGET_COLUMN])
+    all_expected = set(EXPECTED_COLUMNS)
     present      = set(df.columns)
     missing      = all_expected - present
     extra        = present - all_expected
@@ -158,11 +67,9 @@ def _validate_columns(df: pd.DataFrame) -> None:
         raise ValueError(
             f"Schema validation failed — {len(missing)} column(s) missing from CSV:\n"
             f"  Missing : {sorted(missing)}\n"
-            f"  Present : {sorted(present)}"
         )
 
     if extra:
-        # Log a warning but do NOT raise — extra columns are harmless
         logger.warning(
             "Unexpected extra column(s) found and will be retained: %s", sorted(extra)
         )
@@ -172,20 +79,16 @@ def _validate_columns(df: pd.DataFrame) -> None:
 
 def _validate_dtypes(df: pd.DataFrame) -> None:
     """
-    Check that each column's dtype matches its expectation ('numeric' or 'object').
+    Check that each column's dtype matches its expectation.
+    Numeric features should be numeric, nominal can be object/string.
     Raises TypeError listing every violating column.
     """
     violations: list[str] = []
 
-    for col, expected_kind in DTYPE_EXPECTATIONS.items():
-        if col not in df.columns:
-            continue  # already caught by _validate_columns
-
-        actual_kind = "numeric" if pd.api.types.is_numeric_dtype(df[col]) else "object"
-        if actual_kind != expected_kind:
-            violations.append(
-                f"  '{col}': expected {expected_kind}, got {df[col].dtype}"
-            )
+    for col in NUMERIC_FEATURES + BINARY_FEATURES:
+        if col not in df.columns: continue
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            violations.append(f"  '{col}': expected numeric, got {df[col].dtype}")
 
     if violations:
         raise TypeError(
@@ -215,8 +118,7 @@ def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
 def _report_missing_values(df: pd.DataFrame) -> None:
     """
-    Log a summary of missing values per column (informational only — imputation
-    is handled downstream in the ColumnTransformer pipeline).
+    Log a summary of missing values per column (informational only).
     """
     missing = df.isnull().sum()
     missing = missing[missing > 0]
@@ -236,41 +138,37 @@ def _report_missing_values(df: pd.DataFrame) -> None:
         )
 
 
+def _encode_target(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Encode 'Diagnosis' column from 'Positive'/'Negative' to 1/0.
+    """
+    if TARGET_COL in df.columns:
+        if df[TARGET_COL].dtype == object:
+            logger.info("Encoding target '%s' ('Positive'->1, 'Negative'->0)", TARGET_COL)
+            mapping = {'Positive': 1, 'Negative': 0}
+            # Check for unmapped values
+            unmapped = set(df[TARGET_COL].dropna().unique()) - set(mapping.keys())
+            if unmapped:
+                raise ValueError(f"Found unexpected values in target column: {unmapped}")
+            
+            df[TARGET_COL] = df[TARGET_COL].map(mapping)
+    return df
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def load_and_validate(csv_path: str | Path) -> pd.DataFrame:
     """
-    Load the Kaggle asthma CSV, validate its schema and dtypes, remove
-    exact duplicates, and return a clean DataFrame.
-
-    Parameters
-    ----------
-    csv_path : str or Path
-        Path to the raw CSV file (e.g., ``data/raw/asthma_disease_data.csv``).
-
-    Returns
-    -------
-    pd.DataFrame
-        Validated, deduplicated DataFrame with all 26 feature columns
-        and the 'Diagnosis' target column.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the CSV file does not exist at the given path.
-    ValueError
-        If required columns are missing.
-    TypeError
-        If column dtypes do not match expectations.
+    Load the CSV, validate schema, dtypes, remove duplicates, encode target.
     """
     csv_path = Path(csv_path)
 
     if not csv_path.exists():
         raise FileNotFoundError(
             f"CSV file not found: '{csv_path}'. "
-            "Place the raw Kaggle download in data/raw/ and try again."
+            "Please check the path and try again."
         )
 
     logger.info("Loading CSV from '%s' …", csv_path)
@@ -281,18 +179,19 @@ def load_and_validate(csv_path: str | Path) -> pd.DataFrame:
     _validate_columns(df)
     _validate_dtypes(df)
 
-    # --- Cleaning ---
+    # --- Cleaning & Encoding ---
     df = _remove_duplicates(df)
+    df = _encode_target(df)
 
     # --- Informational audit ---
     _report_missing_values(df)
 
     # --- Class distribution ---
-    if TARGET_COLUMN in df.columns:
-        class_counts = df[TARGET_COLUMN].value_counts()
+    if TARGET_COL in df.columns:
+        class_counts = df[TARGET_COL].value_counts()
         minority = class_counts.min()
         majority = class_counts.max()
-        ratio    = majority / minority
+        ratio    = majority / minority if minority > 0 else 0
         logger.info(
             "Class distribution — Negative: %d | Positive: %d | Imbalance ratio: %.1f:1",
             class_counts.get(0, 0),
@@ -305,24 +204,14 @@ def load_and_validate(csv_path: str | Path) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# CLI entry-point (quick sanity check)
+# CLI entry-point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import sys
-
-    # HOW TO RUN:
-    #   python src/data_loader.py
-    #   python src/data_loader.py data/raw/asthma_disease_data.csv
-    path = sys.argv[1] if len(sys.argv) > 1 else "data/raw/asthma_disease_data.csv"
+    from config import DATA_RAW
+    path = sys.argv[1] if len(sys.argv) > 1 else DATA_RAW
     df   = load_and_validate(path)
     print("\n--- Head (first 5 rows) ---")
     print(df.head())
-    print("\n--- Schema info ---")
-    df.info()
     print("\n--- Target distribution ---")
-    print(df[TARGET_COLUMN].value_counts())
-# ---------------------------------------------------------------------------
-# UPDATED MAIN — HOW TO RUN:
-#   python src/data_loader.py
-#   python src/data_loader.py path/to/asthma_disease_data.csv
-# ---------------------------------------------------------------------------
+    print(df[TARGET_COL].value_counts())

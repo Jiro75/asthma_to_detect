@@ -80,6 +80,7 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline   # ← CRITICAL: imblearn, not sklearn
 from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.base import BaseEstimator
+from sklearn.feature_selection import SelectKBest, f_classif
 
 from preprocessing import build_preprocessor            # D3
 
@@ -166,9 +167,12 @@ def build_cv_pipeline(
        
     )
 
+    feature_selector = SelectKBest(score_func=f_classif, k=25)
+
     pipeline = ImbPipeline(
         steps=[
             ("preprocessor", preprocessor),
+            ("feature_selection", feature_selector),
             ("smote",         smote),
             ("classifier",    classifier),
         ],

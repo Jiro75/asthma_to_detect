@@ -32,6 +32,8 @@
 import joblib
 import pandas as pd
 import os
+import pickle
+import numpy as np
 from config import MODEL_PATH, DATA_SPLITS, THRESHOLD_MIN, THRESHOLD_MAX, THRESHOLD_STEP
 
 
@@ -47,5 +49,53 @@ def find_best_threshold(best_model=None) -> float:
     -------
     tau_star : float
     """
-    # TODO: implement
-    raise NotImplementedError("threshold.py: find_best_threshold() not yet implemented.")
+    if best_model is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model file not found at {MODEL_PATH}. "
+                                    "Run training first.")
+        best_model = joblib.load(MODEL_PATH)
+
+    # 1. Load validation data
+    x_path = os.path.join(DATA_SPLITS, "X_val.pkl")
+    y_path = os.path.join(DATA_SPLITS, "y_val.pkl")
+    
+    if not os.path.exists(x_path) or not os.path.exists(y_path):
+        raise FileNotFoundError(f"Validation data not found in {DATA_SPLITS}. "
+                                "Run splitter first.")
+
+    with open(x_path, "rb") as f:
+        X_val = pickle.load(f)
+    with open(y_path, "rb") as f:
+        y_val = pickle.load(f)
+
+    # 2. Get probabilities
+    proba = best_model.predict_proba(X_val)[:, 1]
+
+    # 3. Sweep thresholds
+    thresholds = np.arange(THRESHOLD_MIN, THRESHOLD_MAX + THRESHOLD_STEP, THRESHOLD_STEP)
+    best_f1 = -1.0
+    tau_star = 0.5
+    tau_recall = 0.5
+    max_recall = -1.0
+
+    print(f"\n  [Threshold] Sweeping tau in [{THRESHOLD_MIN}, {THRESHOLD_MAX}] ...")
+
+    from sklearn.metrics import f1_score, recall_score
+
+    for tau in thresholds:
+        y_pred = (proba >= tau).astype(int)
+        f1 = f1_score(y_val, y_pred, zero_division=0)
+        rec = recall_score(y_val, y_pred, zero_division=0)
+
+        if f1 > best_f1:
+            best_f1 = f1
+            tau_star = tau
+        
+        if rec > max_recall:
+            max_recall = rec
+            tau_recall = tau
+
+    print(f"  [Threshold] tau*       = {tau_star:.2f} (Best F1: {best_f1:.4f})")
+    print(f"  [Threshold] tau_recall = {tau_recall:.2f} (Best Recall: {max_recall:.4f})")
+
+    return float(tau_star)

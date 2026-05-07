@@ -203,6 +203,20 @@ def load_and_validate(csv_path: str | Path) -> pd.DataFrame:
     return df
 
 
+def load_data(csv_path: str | Path = None) -> tuple[pd.DataFrame, pd.Series]:
+    """
+    Wrapper for load_and_validate that returns (X, y) as expected by main.py.
+    """
+    from config import DATA_RAW, TARGET_COL
+    if csv_path is None:
+        csv_path = DATA_RAW
+    
+    df = load_and_validate(csv_path)
+    X = df.drop(columns=[TARGET_COL])
+    y = df[TARGET_COL]
+    return X, y
+
+
 # ---------------------------------------------------------------------------
 # CLI entry-point
 # ---------------------------------------------------------------------------

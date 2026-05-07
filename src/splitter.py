@@ -307,6 +307,16 @@ def split_dataset(
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
+def split_data(X: pd.DataFrame, y: pd.Series) -> None:
+    """
+    Wrapper for main.py. Splits X and y and saves to disk.
+    """
+    # Combine back into df for split_dataset or just do it here
+    df = X.copy()
+    df[TARGET_COLUMN] = y
+    split_dataset(df, save_all=True)
+
+
 # ---------------------------------------------------------------------------
 # CLI entry-point
 # ---------------------------------------------------------------------------

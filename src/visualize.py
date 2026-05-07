@@ -42,15 +42,78 @@ from config import FIGURES_DIR, DATA_SPLITS
 def generate_all_plots(best_model, all_models: dict, best_params: dict,
                        cv_results: dict, tau_star: float) -> None:
     """
-    Generate and save all 5 diagnostic figures to FIGURES_DIR.
-
-    Parameters
-    ----------
-    best_model  : fitted pipeline (for confusion matrix)
-    all_models  : dict of all 4 fitted pipelines (for ROC / PR comparison)
-    best_params : dict from run_tuning()
-    cv_results  : dict from run_cross_validation()
-    tau_star    : float from find_best_threshold()
+    Generate and save diagnostic figures to FIGURES_DIR.
     """
-    # TODO: implement
-    raise NotImplementedError("visualize.py: generate_all_plots() not yet implemented.")
+    import numpy as np
+    import pandas as pd
+    import pickle
+    from sklearn.metrics import roc_curve, auc, precision_recall_curve, confusion_matrix
+
+    os.makedirs(FIGURES_DIR, exist_ok=True)
+
+    # 1. Load test data
+    x_path = os.path.join(DATA_SPLITS, "X_test.pkl")
+    y_path = os.path.join(DATA_SPLITS, "y_test.pkl")
+    with open(x_path, "rb") as f:
+        X_test = pickle.load(f)
+    with open(y_path, "rb") as f:
+        y_test = pickle.load(f)
+
+    # 2. ROC Curves
+    plt.figure(figsize=(10, 8))
+    for name, model in all_models.items():
+        # Handle cases where model might be a pipeline or a fitted estimator
+        try:
+            proba = model.predict_proba(X_test)[:, 1]
+            fpr, tpr, _ = roc_curve(y_test, proba)
+            roc_auc = auc(fpr, tpr)
+            plt.plot(fpr, tpr, label=f"{name} (AUC = {roc_auc:.3f})")
+        except:
+            print(f"      ⚠ Could not plot ROC for {name}")
+
+    plt.plot([0, 1], [0, 1], "k--", alpha=0.5)
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curves — All Models (Locked Test Set)")
+    plt.legend(loc="lower right")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIGURES_DIR, "roc_curves.png"), dpi=300)
+    plt.close()
+
+    # 3. Precision-Recall Curves
+    plt.figure(figsize=(10, 8))
+    for name, model in all_models.items():
+        try:
+            proba = model.predict_proba(X_test)[:, 1]
+            prec, rec, _ = precision_recall_curve(y_test, proba)
+            plt.plot(rec, prec, label=name)
+        except:
+            pass
+
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall Curves (Locked Test Set)")
+    plt.legend(loc="lower left")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIGURES_DIR, "pr_curves.png"), dpi=300)
+    plt.close()
+
+    # 4. Confusion Matrix Heatmap
+    proba = best_model.predict_proba(X_test)[:, 1]
+    y_pred = (proba >= tau_star).astype(int)
+    cm = confusion_matrix(y_test, y_pred)
+    
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", 
+                xticklabels=["Negative", "Positive"],
+                yticklabels=["Negative", "Positive"])
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.title(f"Confusion Matrix @ τ* = {tau_star:.2f}")
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIGURES_DIR, "confusion_matrix.png"), dpi=300)
+    plt.close()
+
+    print(f"  [Visualize] All diagnostic figures saved to: {FIGURES_DIR}")

@@ -27,7 +27,8 @@ VAL_SIZE  = 0.1765  # ~15% of remaining 85% ≈ 15% of total
 
 # ── Class Imbalance ────────────────────────────────────────────────────────────
 # Negative: 819  |  Positive: 392  |  ratio ≈ 2.1 : 1
-SCALE_POS_WEIGHT    = 2.1
+# Phase III spec mandates scale_pos_weight = 18.3 for XGBoost
+SCALE_POS_WEIGHT    = 18.3
 SMOTE_RATIO_MIN     = 0.5
 SMOTE_RATIO_MAX     = 0.9
 SMOTE_RATIO_DEFAULT = 0.7   # gentler oversampling — classes are not severely imbalanced
@@ -135,3 +136,40 @@ BINARY_FEATURES = [
     "Chest_Tightness",
     "Nighttime_Symptoms",
 ]
+
+# ── Top 25 Correlated Features (by |Pearson r| with Diagnosis) ────────────────
+# Used by Member 2 for model training on the most informative subset.
+# No nominal features made the top 25 — only numeric and binary.
+
+TOP_25_NUMERIC = [
+    "IgE_Level",                # +0.6308
+    "Eosinophil_Count",         # +0.5772
+    "Wheezing_Frequency",       # +0.5238
+    "Spectral_Contrast_7_mean", # −0.4049
+    "Spectral_Contrast_2_mean", # +0.3892
+    "Age",                      # −0.3520
+    "Spectral_Bandwidth_mean",  # −0.3377
+    "Spectral_Contrast_5_mean", # +0.3202
+    "Spectral_Contrast_4_mean", # +0.3047
+    "MFCC_1_mean",              # −0.3027
+    "Chroma_8_mean",            # −0.3015
+    "RMS_Energy_mean",          # −0.2996
+    "RMS_Energy_std",           # −0.2986
+    "Spectral_Contrast_6_mean", # +0.2704
+    "Air_Pollution_Index",      # +0.2694
+    "Chroma_9_mean",            # −0.2643
+    "MFCC_13_mean",             # +0.2622
+    "Chroma_7_mean",            # −0.2554
+    "Chroma_12_mean",           # +0.2538
+    "MFCC_12_mean",             # +0.2495
+    "Tonnetz_3_mean",           # −0.2455
+    "Spectral_Bandwidth_std",   # −0.2385
+]
+
+TOP_25_BINARY = [
+    "Allergy",                     # +0.4597
+    "Family_History",              # +0.3067
+    "Exercise_Induced_Symptoms",   # +0.3023
+]
+
+TOP_25_FEATURES = TOP_25_NUMERIC + TOP_25_BINARY  # 25 total

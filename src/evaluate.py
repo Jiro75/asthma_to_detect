@@ -48,5 +48,41 @@ def evaluate_on_test(best_model, tau_star: float) -> dict:
     metrics : dict with keys roc_auc, f1, recall, precision, accuracy,
               confusion_matrix (2×2 array)
     """
-    # TODO: implement
-    raise NotImplementedError("evaluate.py: evaluate_on_test() not yet implemented.")
+    # 1. Load test data
+    x_path = os.path.join(DATA_SPLITS, "X_test.pkl")
+    y_path = os.path.join(DATA_SPLITS, "y_test.pkl")
+
+    if not os.path.exists(x_path) or not os.path.exists(y_path):
+        raise FileNotFoundError(f"Test data not found in {DATA_SPLITS}.")
+
+    import pickle
+    with open(x_path, "rb") as f:
+        X_test = pickle.load(f)
+    with open(y_path, "rb") as f:
+        y_test = pickle.load(f)
+
+    # 2. Get probabilities & predictions
+    proba = best_model.predict_proba(X_test)[:, 1]
+    y_pred = (proba >= tau_star).astype(int)
+
+    # 3. Compute metrics
+    from sklearn.metrics import (roc_auc_score, f1_score, recall_score, 
+                             precision_score, accuracy_score, confusion_matrix)
+
+    metrics = {
+        "roc_auc": roc_auc_score(y_test, proba),
+        "f1": f1_score(y_test, y_pred, zero_division=0),
+        "recall": recall_score(y_test, y_pred, zero_division=0),
+        "precision": precision_score(y_test, y_pred, zero_division=0),
+        "accuracy": accuracy_score(y_test, y_pred),
+        "confusion_matrix": confusion_matrix(y_test, y_pred).tolist()
+    }
+
+    # 4. Print table
+    print("\n  [Evaluation] Results on Locked Test Set (τ* = {:.2f}):".format(tau_star))
+    print("  " + "-" * 45)
+    for m, v in metrics.items():
+        if m != "confusion_matrix":
+            print(f"  {m:<15} : {v:.4f}")
+    
+    return metrics

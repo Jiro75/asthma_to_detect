@@ -71,6 +71,10 @@ Author : Member 1
 Project: Asthma Disease Detection — Phase III
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import logging
 from typing import Any
 
@@ -80,9 +84,6 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline   # ← CRITICAL: imblearn, not sklearn
 from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.base import BaseEstimator
-from sklearn.feature_selection import SelectKBest, f_classif
-
-from preprocessing import build_preprocessor            # D3
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -94,9 +95,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cv_pipeline")
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.preprocessing import build_preprocessor            # D3
 
 from config import SMOTE_RATIO_DEFAULT, SMOTE_RATIO_MIN, SMOTE_RATIO_MAX, RANDOM_STATE, CV_FOLDS
 
@@ -120,6 +119,7 @@ def build_cv_pipeline(
     classifier: BaseEstimator,
     smote_ratio: float = DEFAULT_SMOTE_RATIO,
     smote_k_neighbors: int = 5,
+    preprocessor: BaseEstimator | None = None,
 ) -> ImbPipeline:
     """
     Build an imbalanced-learn Pipeline that chains:
@@ -158,7 +158,8 @@ def build_cv_pipeline(
             f"smote_ratio must be in (0, 1]. Got: {smote_ratio}"
         )
 
-    preprocessor = build_preprocessor()
+    if preprocessor is None:
+        preprocessor = build_preprocessor()
 
     smote = SMOTE(
         sampling_strategy=smote_ratio,
@@ -167,12 +168,9 @@ def build_cv_pipeline(
        
     )
 
-    feature_selector = SelectKBest(score_func=f_classif, k=25)
-
     pipeline = ImbPipeline(
         steps=[
             ("preprocessor", preprocessor),
-            ("feature_selection", feature_selector),
             ("smote",         smote),
             ("classifier",    classifier),
         ],
@@ -377,6 +375,7 @@ def preprocess_for_early_stopping(
     X_val: pd.DataFrame,
     smote_ratio: float = DEFAULT_SMOTE_RATIO,
     smote_k_neighbors: int = 5,
+    preprocessor: BaseEstimator | None = None,
 ) -> tuple[np.ndarray, pd.Series, np.ndarray]:
     """
     Prepare data for classifiers that need a raw eval_set (XGBoost, LightGBM
@@ -429,7 +428,8 @@ def preprocess_for_early_stopping(
             verbose=False,
         )
     """
-    preprocessor = build_preprocessor()
+    if preprocessor is None:
+        preprocessor = build_preprocessor()
 
     X_train_t: np.ndarray = preprocessor.fit_transform(X_train, y_train)
     X_val_t:   np.ndarray = preprocessor.transform(X_val)

@@ -11,6 +11,7 @@ Responsibilities:
                    → OrdinalEncoder (ordered binary/ordinal features)
 - Binary (0/1) features are routed to the ordinal branch — NOT through OHE
 - Expose a build_preprocessor() factory that other modules import
+- Expose a build_preprocessor_top25() factory for the top-25 feature subset
 
 Author : Member 1
 Project: Asthma Disease Detection — Phase III
@@ -35,7 +36,10 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import NUMERIC_FEATURES, NOMINAL_FEATURES, BINARY_FEATURES
+from config import (
+    NUMERIC_FEATURES, NOMINAL_FEATURES, BINARY_FEATURES,
+    TOP_25_NUMERIC, TOP_25_BINARY,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -97,7 +101,7 @@ def _nominal_branch() -> Pipeline:
     ])
 
 
-def _ordinal_branch() -> Pipeline:
+def _ordinal_branch(features: list[str] | None = None) -> Pipeline:
     """
     Ordinal / binary pipeline:
       SimpleImputer(most_frequent) → OrdinalEncoder
@@ -107,10 +111,13 @@ def _ordinal_branch() -> Pipeline:
     unknown_value=np.nan means unseen values are treated as missing rather
     than raising an error.
     """
+    if features is None:
+        features = BINARY_FEATURES
+    categories = [[0, 1] for _ in features]
     return Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="most_frequent")),
         ("ordinal", OrdinalEncoder(
-            categories=ORDINAL_CATEGORIES,
+            categories=categories,
             handle_unknown="use_encoded_value",
             unknown_value=np.nan,
             dtype=np.float32,
@@ -165,6 +172,42 @@ def build_preprocessor() -> ColumnTransformer:
     return preprocessor
 
 
+def build_preprocessor_top25() -> ColumnTransformer:
+    """
+    Construct a ColumnTransformer for the top-25 correlated features only.
+
+    This is used by Member 2 for model training on a reduced feature set.
+    Since no nominal/categorical features are in the top 25, only the
+    numeric and ordinal/binary branches are included.
+
+    Returns
+    -------
+    ColumnTransformer
+        With two named transformers:
+          • ``'numeric'``  — 22 continuous features (Yeo-Johnson + scale)
+          • ``'ordinal'``  — 3 binary features (Allergy, Family_History,
+                             Exercise_Induced_Symptoms)
+    """
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("numeric", _numeric_branch(),                    TOP_25_NUMERIC),
+            ("ordinal", _ordinal_branch(TOP_25_BINARY),       TOP_25_BINARY),
+        ],
+        remainder="drop",
+        n_jobs=-1,
+        verbose_feature_names_out=True,
+    )
+
+    logger.info(
+        "Top-25 ColumnTransformer built — "
+        "numeric: %d | binary/ordinal: %d  (total: %d)",
+        len(TOP_25_NUMERIC),
+        len(TOP_25_BINARY),
+        len(TOP_25_NUMERIC) + len(TOP_25_BINARY),
+    )
+    return preprocessor
+
+
 def get_feature_names(preprocessor: ColumnTransformer) -> list[str]:
     """
     Return human-readable output feature names after the transformer has
@@ -194,3 +237,10 @@ if __name__ == "__main__":
 
     print(f"X_train transformed shape : {X_train_t.shape}")
     print(f"X_val   transformed shape : {X_val_t.shape}")
+
+    # Test top-25 preprocessor
+    preprocessor_25 = build_preprocessor_top25()
+    X_train_25 = preprocessor_25.fit_transform(X_train)
+    X_val_25   = preprocessor_25.transform(X_val)
+    print(f"\nTop-25 X_train shape : {X_train_25.shape}")
+    print(f"Top-25 X_val   shape : {X_val_25.shape}")

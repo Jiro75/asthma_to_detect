@@ -39,6 +39,7 @@ from src.save_model     import fit_and_save
 from src.threshold      import find_best_threshold
 from src.evaluate       import evaluate_on_test
 from src.visualize      import generate_all_plots
+from src.visualize_all_preprocessing import main as generate_preprocessing_plots
 from src.shap_analysis  import run_shap
 from config             import BASE_DIR
 
@@ -116,6 +117,8 @@ def main():
     # ── Step 11: Visualizations ───────────────────────────────────────────────
     print("[11/12] Generating figures...")
     generate_all_plots(best_model, models, best_params, cv_results, tau_star)
+    print("        Generating preprocessing figures...")
+    generate_preprocessing_plots()
 
     # ── Step 12: SHAP analysis ────────────────────────────────────────────────
     print("[12/12] Running SHAP analysis...")
